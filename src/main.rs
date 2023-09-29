@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::hash::Hash;
+
 /** RandomAccessAnimation:
  * This animation format stores the position of each frame.
  * This allows for tight packing of the frames in memory.
@@ -9,33 +13,37 @@ struct RandomAccessAnimation {
 
 /** AnimationMachine:
  * This struct is used to manage the animation.
- * It stores the current animation, the current frame, and the countdown timer.
- * The countdown timer is used to determine when to move to the next frame.
- *
+ * It takes in an enum it associates with the current animations.
 */
-
-struct AnimationMachine {
-    pub animations: Vec<RandomAccessAnimation>,
-    pub current_animation_index: usize,
-    pub current_animation_frame: usize,
-    pub countdown_timer: u8,
-    pub frame_duration: u8,
-    pub default_frame_duration: u8,
+pub struct AnimationMachine<T: Eq + Hash + Clone + Debug> {
+    animation_mapping: HashMap<T, usize>,
+    animations: Vec<RandomAccessAnimation>,
+    current_animation: Option<T>,
+    current_animation_index: usize,
+    current_animation_frame: usize,
+    countdown_timer: u8,
+    frame_duration: u8,
+    default_frame_duration: u8,
 }
 
-impl AnimationMachine {
-    pub fn new(
-        animations: Vec<RandomAccessAnimation>,
-        default_frame_duration: u8,
-    ) -> AnimationMachine {
+impl<T: Eq + Hash + Clone + Debug> AnimationMachine<T> {
+    pub fn new(default_frame_duration: u8) -> AnimationMachine<T> {
         AnimationMachine {
-            animations: animations,
+            animation_mapping: HashMap::new(),
+            animations: Vec::new(),
+            current_animation: Option::None,
             current_animation_index: 0,
             current_animation_frame: 0,
             countdown_timer: default_frame_duration,
             frame_duration: default_frame_duration,
             default_frame_duration: default_frame_duration,
         }
+    }
+
+    pub fn add_animation(&mut self, state: T, animation: RandomAccessAnimation) {
+        self.animation_mapping
+            .insert(state.clone(), self.animations.len());
+        self.animations.push(animation);
     }
 
     pub fn reset_speed(&mut self) {
@@ -49,14 +57,20 @@ impl AnimationMachine {
         }
     }
 
-    pub fn set_animation(&mut self, index: usize) {
-        self.current_animation_index = index;
-        self.current_animation_frame = 0;
-        self.countdown_timer = 0;
-        self.frame_duration = 0;
+    pub fn set_animation(&mut self, state: T) {
+        if self.animations.contains_key(&state) {
+            self.current_animation = state.clone();
+            self.current_animation_frame = 0;
+            self.countdown_timer = self.frame_duration;
+        } else {
+            panic!(
+                "Unknown animation state: {:?} \n Did you forget to add it?",
+                state
+            );
+        }
     }
 
-    pub fn get_current_animation(&self) -> &RandomAccessAnimation {
+    fn get_current_animation(&self) -> &RandomAccessAnimation {
         &self.animations[self.current_animation_index]
     }
 
@@ -76,37 +90,27 @@ impl AnimationMachine {
     }
 }
 
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+enum MyAnimationState {
+    Run,
+    Hide,
+    Jump,
+    Shoot,
+}
+
 fn main() {
-    // Create animations
-    let anim1 = RandomAccessAnimation {
-        positions: vec![(0, 0), (1, 1), (2, 2)],
-    };
-    let anim2 = RandomAccessAnimation {
-        positions: vec![(10, 10), (11, 11), (12, 12)],
-    };
-
-    let mut anim_machine = AnimationMachine::new(vec![anim1, anim2], 5);
-
-    // Simulate Animation Steps
-    for i in 0..20 {
-        println!(
-            "Step {}: Current Frame {:?}, Current Position {:?}, Countdown Timer {}",
-            i,
-            anim_machine.current_animation_frame,
-            anim_machine.get_current_frame_position(),
-            anim_machine.countdown_timer
-        );
-
-        // Step AnimationMachine
-        anim_machine.set_speed(1.0);
-        anim_machine.reset_speed();
-        anim_machine.step();
-
-        // Change animation at step 10
-        if i == 9 {
-            anim_machine.set_animation(1);
-            anim_machine.frame_duration = 3;
-            anim_machine.countdown_timer = 3;
-        }
-    }
+    let mut machine = AnimationMachine::new(MyAnimationState::Run, 5);
+    machine.add_animation(
+        MyAnimationState::Run,
+        RandomAccessAnimation {
+            positions: vec![(0, 0), (1, 1)],
+        },
+    );
+    machine.add_animation(
+        MyAnimationState::Jump,
+        RandomAccessAnimation {
+            positions: vec![(2, 2), (3, 3)],
+        },
+    );
+    machine.set_animation(MyAnimationState::Run);
 }
